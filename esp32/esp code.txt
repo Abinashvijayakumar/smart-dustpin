@@ -1,0 +1,98 @@
+#include <WiFi.h>               // Use <ESP8266WiFi.h> for NodeMCU
+#include <BlynkSimpleEsp32.h>   // Use <BlynkSimpleEsp8266.h> for NodeMCU
+#include <Servo.h>
+
+char auth[] = "Your_Blynk_Auth_Token";
+char ssid[] = "Your_WiFi_SSID";
+char pass[] = "Your_WiFi_Password";
+
+const int trigPin = 5; // D1 (GPIO5) on NodeMCU
+const int echoPin = 18; // D2 (GPIO18 on ESP32 or GPIO4 for NodeMCU)
+const int servoPin = 13; // GPIO13 (D7) — change as needed
+
+Servo lidServo;
+
+bool lidOpen = false;
+unsigned long lastDetectionTime = 0;
+bool autoMode = true;
+
+BlynkTimer timer;
+
+void setup() {
+  Serial.begin(115200);
+  pinMode(trigPin, OUTPUT);
+  pinMode(echoPin, INPUT);
+  lidServo.attach(servoPin);
+  lidServo.write(0); // Start closed
+
+  Blynk.begin(auth, ssid, pass);
+  timer.setInterval(500L, checkDistance); // Check every 0.5s
+}
+
+// Auto/Manual mode toggle
+BLYNK_WRITE(V0) {
+  autoMode = param.asInt();
+  if (!autoMode) {
+    Serial.println("Manual mode enabled");
+  } else {
+    Serial.println("Auto mode enabled");
+  }
+}
+
+// Manual Open
+BLYNK_WRITE(V1) {
+  if (!autoMode && param.asInt() == 1) {
+    lidServo.write(120);
+    lidOpen = true;
+    Serial.println("Lid manually opened");
+  }
+}
+
+// Manual Close
+BLYNK_WRITE(V2) {
+  if (!autoMode && param.asInt() == 1) {
+    lidServo.write(0);
+    lidOpen = false;
+    Serial.println("Lid manually closed");
+  }
+}
+
+void checkDistance() {
+  if (!autoMode) return;
+
+  // Ultrasonic pulse
+  digitalWrite(trigPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(trigPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(trigPin, LOW);
+
+  long duration = pulseIn(echoPin, HIGH, 30000);
+  float distance = duration * 0.034 / 2;
+
+  Blynk.virtualWrite(V3, distance); // Optional display on Blynk app
+
+  Serial.print("Distance: ");
+  Serial.print(distance);
+  Serial.println(" cm");
+
+  if (distance > 0 && distance < 20) {
+    lastDetectionTime = millis();
+    if (!lidOpen) {
+      lidServo.write(120);
+      lidOpen = true;
+      Serial.println("Lid auto opened");
+    }
+  }
+
+  if (lidOpen && (millis() - lastDetectionTime > 4000)) {
+    lidServo.write(0);
+    lidOpen = false;
+    Serial.println("Lid auto closed");
+  }
+}
+
+void loop() {
+  Blynk.run();
+  timer.run();
+}

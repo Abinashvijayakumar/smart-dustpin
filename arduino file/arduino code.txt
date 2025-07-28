@@ -1,0 +1,53 @@
+#include <Servo.h>
+
+const int pingPin = 7; 
+const int echoPin = 6;
+Servo lidServo;
+
+unsigned long lastDetectionTime = 0;
+bool lidOpen = false;
+
+void setup() {
+  Serial.begin(9600);
+  pinMode(pingPin, OUTPUT); 
+  pinMode(echoPin, INPUT);
+  lidServo.attach(9); 
+  lidServo.write(0); // Lid closed
+}
+
+void loop() {
+  // Trigger ultrasonic pulse
+  digitalWrite(pingPin, LOW);
+  delayMicroseconds(2);
+  digitalWrite(pingPin, HIGH);
+  delayMicroseconds(10);
+  digitalWrite(pingPin, LOW);
+
+  // Measure echo time
+  long duration = pulseIn(echoPin, HIGH, 30000); // timeout at 30ms = ~5m
+  float distance = duration * 0.034 / 2;
+
+  // Debug: show distance
+  Serial.print("Distance: ");
+  Serial.print(distance);
+  Serial.println(" cm");
+
+  // Object detected
+  if (distance > 0 && distance < 20) {
+    lastDetectionTime = millis();
+    if (!lidOpen) {
+      lidServo.write(180); // Open lid
+      lidOpen = true;
+      Serial.println("Lid opened");
+    }
+  }
+
+  // If no detection for exactly 4 seconds
+  if (lidOpen && (millis() - lastDetectionTime >= 1000)) {
+    lidServo.write(0); // Close lid
+    lidOpen = false;
+    Serial.println("Lid closed");
+  }
+
+  delay(50); // Very short delay to keep loop fast
+}
